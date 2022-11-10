@@ -34,10 +34,10 @@ class Config extends React.Component{
       'selectedFieldMappings': {}
     }
     //  Bind event handlers to `this`
-    this.getObjects = this.getObjects.bind(this);
-    this.getObjectFields = this.getObjectFields.bind(this);
-    this.setFieldMapping = this.setFieldMapping.bind(this);
-    this.salesforceLogin = this.salesforceLogin.bind(this);
+    // this.getObjects = this.getObjects.bind(this);
+    // this.getObjectFields = this.getObjectFields.bind(this);
+    // this.setFieldMapping = this.setFieldMapping.bind(this);
+    // this.salesforceLogin = this.salesforceLogin.bind(this);
     this.saveThenCloseDialog = this.saveThenCloseDialog.bind(this);
     this.closeDialog = this.closeDialog.bind(this);
   }
@@ -121,10 +121,10 @@ class Config extends React.Component{
       })
 
       //  See if we can get the salesforce data automatically
-      if(hasSalesforceCredentials){
-        //  Run the login function, which will trigger the rest of the salesforce api calls
-        thisComponent.salesforceLogin();
-      }
+      // if(hasSalesforceCredentials){
+      //   //  Run the login function, which will trigger the rest of the salesforce api calls
+      //   thisComponent.salesforceLogin();
+      // }
     }
 
     //  Initialize the popup using tableau extension api
@@ -136,7 +136,7 @@ class Config extends React.Component{
   /**********************************************/
 
   //  Helper function that logs into Salesforce, to get an access token
-  async salesforceLogin(){
+/*   async salesforceLogin(){
 
     //  Fetch a list of objects from Salesforce
     const options = {
@@ -171,10 +171,10 @@ class Config extends React.Component{
         this.getObjects();
       })
     }
-  }
+  } */
 
   //  Get a list of objects from salesforce
-  async getObjects(){
+  /* async getObjects(){
 
     //  Save a reference to this
     let thisComponent = this;
@@ -285,13 +285,13 @@ class Config extends React.Component{
       })
     }
   }
-
+ */
   /**********************************************/
   /*  Helper Functions                          */
   /**********************************************/ 
 
   //  Update field mapping
-  setFieldMapping(sfField, tableauFieldName){
+/*   setFieldMapping(sfField, tableauFieldName){
     //  Get a reference to the tableau field
     const tableauField = this.state.fields[this.state.selectedSheet].filter( (tf) => {
       return tf.fieldName === tableauFieldName;
@@ -309,7 +309,7 @@ class Config extends React.Component{
     }
     //  Update the state
     this.setState({selectedFieldMappings: mappings})
-  }
+  } */
 
   // Background helper that checks to see if the current item should be marked as selected
   isItemSelected(item, setting, index) {
@@ -336,8 +336,8 @@ class Config extends React.Component{
     //  Make sure to piece together the settings
     const newSettings = {
       'salesforce': {
-        'FieldMappings': this.state.selectedFieldMappings,
-        'ObjectName': this.state.selectedObject,
+        // 'FieldMappings': this.state.selectedFieldMappings,
+        // 'ObjectName': this.state.selectedObject,
         'username': util.getProp(['salesforce','username'],this.state.settings,''),
         'password': util.getProp(['salesforce','password'],this.state.settings,'')
       },
@@ -384,7 +384,8 @@ class Config extends React.Component{
         content: 'Login', 
       }, { 
         content: 'Data' 
-      }, { 
+      }, 
+      { 
         content: 'Mapping' 
       } 
     ];
@@ -398,24 +399,24 @@ class Config extends React.Component{
     })
 
     let availableFields = {};
-    this.state.sfFields.forEach( (field) => {
-      //  Create a copy of the available tableau fields
-      let tFields = JSON.parse(JSON.stringify(tableauFields));
-      //  Look for an existing selection
-      const existingSelection = this.state.selectedFieldMappings[field.value];
-      if (existingSelection) {
-        //  Get the selected tableau field for this salesforce field
-        const selectedTField = existingSelection.tableau.fieldName;
-        //  Loop through the tableau field options, and mark one as selected
-        tFields.forEach( (tField) => {
-          if(tField.value === selectedTField){
-            tField.isSelected = true;
-          }
-        })
-      }
-      //  Save this copy, specifically for this salesforce field
-      availableFields[field.value] = tFields;
-    })
+    // this.state.sfFields.forEach( (field) => {
+    //   //  Create a copy of the available tableau fields
+    //   let tFields = JSON.parse(JSON.stringify(tableauFields));
+    //   //  Look for an existing selection
+    //   const existingSelection = this.state.selectedFieldMappings[field.value];
+    //   if (existingSelection) {
+    //     //  Get the selected tableau field for this salesforce field
+    //     const selectedTField = existingSelection.tableau.fieldName;
+    //     //  Loop through the tableau field options, and mark one as selected
+    //     tFields.forEach( (tField) => {
+    //       if(tField.value === selectedTField){
+    //         tField.isSelected = true;
+    //       }
+    //     })
+    //   }
+    //   //  Save this copy, specifically for this salesforce field
+    //   availableFields[field.value] = tFields;
+    // })
 
     //  Function to create dropdown menu options, based on objects with the following format:
     //  obj = { value: 'selection value', isSelected: true/false, label: 'text to display'}
@@ -424,12 +425,12 @@ class Config extends React.Component{
     const makeFieldOption = (field, index) => 
       <div className="tableau-section-group" key={index}>
         <span className="tableau-section-label">{field.label}:</span>
-        <DropdownSelect  kind='line'
+        {/* <DropdownSelect  kind='line'
           onChange={ e => { this.setFieldMapping(field, e.target.value) }} >
           { 
             availableFields[field.value].map(makeOption)
           }
-        </DropdownSelect>
+        </DropdownSelect> */}
       </div>
     
     const updateSfCredentials = (prop,value) => {
@@ -457,7 +458,7 @@ class Config extends React.Component{
                         onChange={ e => {updateSfCredentials('password',e.target.value);}} />
                     </div>
                     <br />
-                    <Button kind="primary" key="login" onClick={ thisComponent.salesforceLogin }>Login</Button>
+                    {/* <Button kind="primary" key="login" onClick={ thisComponent.salesforceLogin }>Login</Button> */}
                   </div>;
 
     //  Define the data selection page
@@ -470,17 +471,17 @@ class Config extends React.Component{
                         { this.state.worksheets.map(makeOption) }
                       </DropdownSelect>
                     </div>
-                    <div className="tableau-section-title">What Salesforce Object do we write back to?</div>
+                    {/* <div className="tableau-section-title">What Salesforce Object do we write back to?</div>
                       <div className="tableau-section-group">
                       <span className="tableau-section-label">SF Object:</span>
-                      <DropdownSelect  kind='line'
+                       <DropdownSelect  kind='line'
                         onChange={ e => { 
                           this.setState({'selectedObject': e.target.value});
                           this.getObjectFields(e.target.value);
                         }} >
                         { this.state.sfObjects.map(makeOption) }
-                      </DropdownSelect>
-                    </div>
+                      </DropdownSelect> 
+                    </div> */}
                   </div>;
 
     //  Define the parameter selection page

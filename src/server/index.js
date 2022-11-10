@@ -7,7 +7,8 @@ const querystring = require('querystring');
 const sleep = require('util').promisify(setTimeout);
 const createCsvStringifier = require('csv-writer').createArrayCsvStringifier;
 const log = require('simple-node-logger').createSimpleLogger();
-
+// const Client = require('pg');
+const { Client } = require('pg')
 //	Load the config file
 const extensionConfig = require('./config.js');
 
@@ -54,7 +55,7 @@ function buildResponse(message, isError, details) {
 /****************************************************/
 
 //	Get the profile(s) of the current user
-function getProfile(credentials,username){
+function getProfile(credentials, username) {
 
 	//	Define the SOQL query to execute
 	const soql = `SELECT Profile.Name from Profile where Profile.Id in (SELECT User.ProfileId FROM User where User.username='${username}')`;
@@ -64,7 +65,7 @@ function getProfile(credentials,username){
 
 	//	Define the options
 	const options = {
-		'method':'GET',
+		'method': 'GET',
 		'url': url,
 		'headers': {
 			'Authorization': `Bearer ${credentials.access_token}`
@@ -77,7 +78,7 @@ function getProfile(credentials,username){
 		const message = `${username} has a profile = ${profile}`;
 		log.info(message);
 		return profile;
-	}).catch((error)=>{
+	}).catch((error) => {
 		const message = `Could not find a profile for ${username}`;
 		log.error(message);
 		return null;
@@ -96,7 +97,7 @@ function createJob(credentials, objectName) {
 	//	Use simple api call (lists available rest resources) for testing
 	const url = `${credentials.instance_url}/services/data/v${extensionConfig.public.salesforceApiVersion}/jobs/ingest/`;
 
-		//	Define the payload to send
+	//	Define the payload to send
 	const payload = {
 		'object': objectName,
 		'contentType': 'CSV',
@@ -134,377 +135,491 @@ function createJob(credentials, objectName) {
 	});
 }
 
-//	Salesforce - upload the data as CSV
-function uploadData(credentials, jobId, data) {
+app.post('/api/reset', (async (req, res)=>{
 
-	log.info('Uploading the data in CSV format');
+	let options = req.body;
+			console.log(`options: ${JSON.stringify(options)}`)
+			let client = new Client(options);
 
-	//	Use simple api call (lists available rest resources) for testing
-	const url = `${credentials.instance_url}/services/data/v${extensionConfig.public.salesforceApiVersion}/jobs/ingest/${jobId}/batches`;
+			try {
 
-	//	Define the api call's configuration
-	const options = {
-		'method': 'PUT',
-		'url': url,
-		'headers': {
-			'Content-Type': 'text/csv',
-			'Accept': 'application/json',
-			'Authorization': `Bearer ${credentials.access_token}`,
-		},
-		'data': data
-	};
-
-	//	Make the api call to tableau server
-	return axios(options).then((response) => {
-		log.info('Data uploaded');
-		return {
-			'success': true,
-			'jobId': response.data.id,
-			'details': ''
-		};
-	}).catch((error) => {
-		log.error('Data upload failed');
-		return {
-			'success': false,
-			'jobId': null,
-			'details': error
-		};
-	});
-}
-
-//	Salesforce - close the job
-function closeJob(credentials, jobId) {
-
-	log.info(`Close job ${jobId} (data upload complete)`);
-
-	//	Use simple api call (lists available rest resources) for testing
-	const url = `${credentials.instance_url}/services/data/v${extensionConfig.public.salesforceApiVersion}/jobs/ingest/${jobId}/`;
-
-	//	Define the api call's configuration
-	const options = {
-		'method': 'PATCH',
-		'url': url,
-		'headers': {
-			'Content-Type': 'application/json; charset=UTF-8',
-			'Accept': 'application/json',
-			'Authorization': `Bearer ${credentials.access_token}`,
-		},
-		'data': {
-			'state': writeback.states.dataUploaded
-		}
-	};
-
-	//	Make the api call to tableau server
-	return axios(options).then((response) => {
-		log.info(`Job ${jobId} closed`);
-		return {
-			'success': true,
-			'jobId': jobId,
-			'details': ''
-		};
-	}).catch((error) => {
-		log.error(`Error: Job ${jobId} closing failed`);
-		return {
-			'success': false,
-			'jobId': jobId,
-			'details': error
-		};
-	});
-}
-
-//	Salesforce - get the status of a job
-function jobStatus(credentials, jobId) {
-
-	log.info(`Waiting for job ${jobId} to complete...`);
-
-	//	Use simple api call (lists available rest resources) for testing
-	const url = `${credentials.instance_url}/services/data/v${extensionConfig.public.salesforceApiVersion}/jobs/ingest/${jobId}/`;
-
-	//	Define the api call's configuration
-	const options = {
-		'method': 'GET',
-		'url': url,
-		'headers': {
-			'Content-Type': 'application/json; charset=UTF-8',
-			'Accept': 'application/json',
-			'Authorization': `Bearer ${credentials.access_token}`,
-		}
-	};
-
-	//	Make the api call to tableau server
-	return axios(options).then((response) => {
-		log.info(`Job ${jobId} closed`);
-		return response.data;
-	}).catch((error) => {
-		log.error(`Failed to close job ${jobId}`);
-		return {
-			'success': false,
-			'jobId': jobId,
-			'details': error
-		};
-	});
-}
-
-/****************************************************/
-/*	Public methods: Salesforce API calls  		  	*/
-/****************************************************/
-
-//	API endpoint for logging in with a username & password
-// 	https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/quickstart_oauth.htm
-app.post('/api/salesforce/login', async (req, res) => {
-
-	//	Start with extracting the payload of the request
-	const data = req.body ? req.body : {};
-
-	//	Check to make sure a username & password were given
-	if (!data.username || !data.password){
-		res.send(buildResponse('Error: username & password required', true));
-		return null;
-	}
-
-	//	Define the login payload
-	const payload = {
-		'grant_type': 'password',
-		'username': data.username,
-		'password': data.password,
-		'client_id': extensionConfig.private.consumerKey,
-		'client_secret': extensionConfig.private.consumerSecret
-	};
-
-	//	Define the api call's configuration
-	const options = {
-		'method': 'POST',
-		'url': extensionConfig.public.salesforceLoginUri,
-		'headers': {
-			'Content-Type': 'application/x-www-form-urlencoded',
-		},
-		'data': querystring.stringify(payload)
-	};
-
-	//	Make the API call to Salesforce
-	log.info('Request access token for ' + data.username);
-	let credentials = await axios(options).then((response) => {
-		log.info('Received access token from Salesforce');
-		return response.data
-	}).catch((error) => {
-		return buildResponse('Credentials were denied by Salesforce', true, {'error': error.message});
-	});
-
-	//	return the response
-	if(credentials.access_token){
-
-		//	Make sure the user belongs to an acceptable profile
-		const userProfile = await getProfile(credentials,data.username);
-
-		//	Check to see if this user's profile is in the list of profiles that are authenticated to the connected app
-		const appProfiles = extensionConfig.private.profiles.split(',');
-		const isValid = appProfiles.indexOf(userProfile)>=0;		
-		if (isValid) {
-			//	User belongs to a valid profile
-			res.send(buildResponse('Salesforce credentials accepted',false, credentials));
-		} else {
-			//	User is valid, but their profile does not have access to the connected app
-			res.send(buildResponse('User does not belong to a profile, which can talk to the connected app', true, {}));
-		}
-	} else {
-		res.send(credentials)
-	}
+			
+				await client.connect()
+			
+			 await client.query(`delete from salesterritories`);
+				
+				res.send(`Deleted all rows`);
+			}
+			catch (err){
+				console.log(err);
+				res.status(400).send(err.message);
+			}
+			finally {
+				await client.end();
+			}
 })
+);
 
-//	API endpoint for getting a list of salesforce objects
-//	https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/dome_describeGlobal.htm
-app.get('/api/salesforce/objects', async (req, res) => {
+//	Salesforce - upload the data as CSV
+app.post('/api/upload', async (req, res) => {
+	// function uploadData(credentials, jobId, data) {
+
+	log.info('Inserting data to db');
 	
-	//	Get the authentication details
-	//const login = await salesforceInit();
-	const credentials = {
-		'access_token': req.header('access_token'),
-		'instance_url': req.header('instance_url')
-	}
-
-	if (credentials.access_token && credentials.instance_url) {
-
-		//	Use simple api call (lists available rest resources) for testing
-		const url = `${credentials.instance_url}/services/data/v${extensionConfig.public.salesforceApiVersion}/sobjects/`;
-
-		//	Define the api call's configuration
-		const options = {
-			'method': 'GET',
-			'url': url,
-			'headers': {
-				'Authorization': `Bearer ${credentials.access_token}`,
-			}
-		};
-
-		//	Make the api call to tableau server
-		return axios(options).then((response) => {
-			const message = 'Returning list of available objects';
-			log.info(message);
-			return res.send(buildResponse(message,false, response.data))
-		}).catch((error) => {
-			const message = 'Salesforce denied our API call to get the list of available objects';
-			log.error(message);
-			return res.send(buildResponse(message,true, {'error': error.message}))
-			
-		});
-	} else {
-		log.error("Not Authorize: access_token or instance_url not provided");
-		return res.send(buildResponse('Not Authorized', true, {'error': 'access_token or instance_url not provided'}))
-	}
-});
-
-//	API endpoint for describing a specific salesforce object
-//	https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/dome_sobject_basic_info.htm
-app.get('/api/salesforce/describe', async (req, res) => {
-
-	//	Make sure the object was passed in, otherwise return an empty array
-	if (typeof req.query.object === 'undefined') {
-		const message = 'No object defined';
-		log.info(message);
-		res.send(buildResponse(message,false, []));
-	}
+	//	Use simple api call (lists available rest resources) for testing
+	// const url = `${credentials.instance_url}/services/data/v${extensionConfig.public.salesforceApiVersion}/jobs/ingest/${jobId}/batches`;
 	
-	const credentials = {
-		'access_token': req.header('access_token'),
-		'instance_url': req.header('instance_url')
-	}
-
-	if (credentials.access_token && credentials.instance_url) {
-
-		//	API endpoint for describing the fields (and other aspects) of a given object
-		const url = `${credentials.instance_url}/services/data/v${extensionConfig.public.salesforceApiVersion}/sobjects/${req.query.object}/describe`;
-
-		//	Define the api call's configuration
-		const options = {
-			'method': 'GET',
-			'url': url,
-			'headers': {
-				'Authorization': `Bearer ${credentials.access_token}`,
-			}
-		};
-
-		//	Make the api call to tableau server
-		return axios(options).then((response) => {
-			const message = `Fetched the description of object=${req.query.object}`;
-			log.info(message);
-			return res.send(buildResponse(message,false, response.data));
-		}).catch((error) => {
-			const message = `API call failed when describing ${req.query.object}`;
-			log.error(message);
-			return res.send(buildResponse(message,true, {'error': error.message}));
-		});
-	} else {
-		log.error("Not Authorize: access_token or instance_url not provided");
-		return res.send(buildResponse('Not Authorized', true, {'error': 'access_token or instance_url not provided'}));
-	}
-});
-
-//	API endpoint for writing data back to salesforce (bulk api)
-//	https://developer.salesforce.com/docs/atlas.en-us.api_bulk_v2.meta/api_bulk_v2/walkthrough_upload_data.htm
-app.post('/api/salesforce/upload', async (req, res) => {
-
-	//	Step 0: Make sure we have the auth details
-
-	//	Get the authentication details
-	const credentials = {
-		'access_token': req.header('access_token'),
-		'instance_url': req.header('instance_url'),
-	}
-
-	if (credentials.access_token && credentials.instance_url) {
-	
-		//	Step 1: convert the dataset to CSV
-		//	https://developer.salesforce.com/docs/atlas.en-us.api_bulk_v2.meta/api_bulk_v2/datafiles_csv_rel_field_header_row.htm
-
-		//	Start with extracting the payload of the request
-		const payload = req.body ? req.body : {};
-
-		//	Make sure a payload was sent
-		if (typeof payload === 'undefined') {
-			const message = 'No data provided';
-			log.error(message);
-			res.send(buildResponse(message,true, {'success': false,'recordsUploaded': 0}))
-		}
-
-		//	Format data as CSV 
-		const csvStringifier = createCsvStringifier({
-			'header': [payload.fields],
-			'alwaysQuote': false,
-			'fieldDelimiter': ',',
-			'recordDelimiter': writeback.recordDelimiter
-		});
-
-		//	Combine the header fields with data records
-		const data = `${payload.fields}${writeback.recordDelimiter}${csvStringifier.stringifyRecords(payload.records)}`;
-		log.trace(data);
-
-		//	Step 2: Create a job via Salesforce API	
-		const job = await createJob(credentials, payload.object);
-
-		//	Step 3: Upload CSV via Salesforce API
-		const upload = await uploadData(credentials, job.jobId, data);
-
-		//	Step 4: Close the job (which triggers processing) via Salesforce API
-		const close = await closeJob(credentials, job.jobId);
-
-		//	Step 5: Wait for the job to complete
-		
-		//	Define some variables for our condition, and mark the start time
-		let running = true;
-		let status;
-		const startTime = new Date();
-
-		//	Loop while waiting for the condition to be false
-		while (running) {
-			
-			//	Wait before trying getting the status again
-			await sleep(writeback.pause);
-
-			//	Get the latest status
-			status = await jobStatus(credentials, job.jobId);
-
-			//	Re-evaluate the condition
-			log.info(`current status: ${status.state}`);
-
-			//	Check the status of the job
-			if (status.state === writeback.states.finished) {
-				running = false;
-			}
-			//	Check for timeout
-			const runTime = (new Date() - startTime);
-			if (runTime >= writeback.timeout) {
-				running = false;
-			}
-		}
-
-		//	Step 7: Return a response
-		const message = `${status.numberRecordsProcessed} records written to ${payload.object}`;
-		log.info(message);
-		res.send(
-			buildResponse(
-				message,
-				false, 
-				{
-					'success': true,
-					'recordsUploaded': status.numberRecordsProcessed,
-					'details': status.state
+	//	Define the api call's configuration
+	// const options = {
+		// 	'method': 'PUT',
+		// 	'url': url,
+		// 	'headers': {
+			// 		'Content-Type': 'text/csv',
+			// 		'Accept': 'application/json',
+			// 		'Authorization': `Bearer ${credentials.access_token}`,
+			// 	},
+			// 	'data': data
+			// };
+			/* 	const options = {
+				host: "ec2-44-195-100-240.compute-1.amazonaws.com",
+				database: "d6khl2b75mr0am",
+				user: req.body.username,
+				port: 5432,
+				password: req.body.password,
+				ssl: {
+					rejectUnauthorized: false
 				}
-			)
-		)
-	} else {
-		const message = "Not Authorize: access_token or instance_url not provided";
-		log.error(message);
-		return res.send(buildResponse(message, true, {'error': 'A valid access_token and instance_url must be provided, in order to write data to salesforce'}))
-	}
+			}; */
+			let options = req.body.options;
+			console.log(`options: ${JSON.stringify(options)}`)
+			let client = new Client(options);
 
-});
+			try {
 
-//	API endpoint for fetching this app's configuration settings
-app.get('/api/config', (req, res) => res.send(extensionConfig.public));
+				console.log('1');
+				await client.connect()
+				console.log('2');
+				// const result = await client.query('SELECT $1::text as message', ['Hello world!'])
+				// console.log('3');
+				// console.log(result.rows[0].message) // Hello world!
+				console.log('4');
+				let fields = `"${req.body.data.fields.join('","')}"`;
+				console.log(`fields: ${fields}`);
+				console.log(`data: ${req.body.data.records}`);
+				let placeholders = "";
+				for (let i = 0; i< req.body.data.fields.length; i++){
+					if (i === 0){
+						placeholders = "$1";
+					}
+					else {
+						placeholders = `${placeholders},$${i+1}`;
+					}
+				}
+				let records = req.body.data.records;
+				let r = [];
+				for (let row = 0; row < records.length; row++){	
+					let res2 = await client.query(`insert into salesterritories(${fields}) values(${placeholders}) returning *`,  records[row]);
+					console.log('5');
+					console.log(JSON.stringify(res2));
+				};
+				console.log('6');
+				// let res2 = await client.query('select * from SalesTerritories');
+				// console.log('5');
+				// console.log(JSON.stringify(res2));
+				// console.log('6');
+				console.log('7');
+				res.send(`Inserted ${records.length} rows`);
+			}
+			catch (err){
+				console.log(err);
+				res.status(400).send(err.message);
+			}
+			finally {
+				await client.end();
+			}
+})
+/* 	let client = new Client(options);
+	client.connect().then(() => {
+		console.log(`client connected`);
+		// self.client = client;
 
-/****************************************************/
-/*	Start the Web App  		  					  	*/
-/****************************************************/
+	})
+		.then(() => {
+			console.log(`sending data:`);
+			console.log(req.body.data);
+			let text = 'insert into SalesTerritories (territory, ae, account) VALUES($1, $2) RETURNING *;';
+			client.query(text, req.body.data)
+				.then((result) => {
+					// toast.success(`Wrote ${JSON.stringify(res)}`);
+					console.log(`wrote data: ${JSON.stringify(result)}`);
+					res.send(result);
+				})
+				.then(client.end)
+				.then(() => {
+					console.log(`Client disconnected.`)
+				})
+				.catch(err => {
+					// toast.error(err.message);
+					return err.message;
+				});
+			});
+		}); */
+	
+	
 
-//	Start the application, and listen on a given port
-app.listen(process.env.PORT || 8080, () => console.log(`Listening on port ${process.env.PORT || 8080}!`));
+			//	Make the api call to tableau server
+			// return axios(options).then((response) => {
+			// 	log.info('Data uploaded');
+			// 	return {
+			// 		'success': true,
+			// 		'jobId': response.data.id,
+			// 		'details': ''
+			// 	};
+			// }).catch((error) => {
+			// 	log.error('Data upload failed');
+			// 	return {
+			// 		'success': false,
+			// 		'jobId': null,
+			// 		'details': error
+			// 	};
+			// });
+
+
+
+
+			//	Salesforce - close the job
+			/* function closeJob(credentials, jobId) {
+			
+				log.info(`Close job ${jobId} (data upload complete)`);
+			
+				//	Use simple api call (lists available rest resources) for testing
+				const url = `${credentials.instance_url}/services/data/v${extensionConfig.public.salesforceApiVersion}/jobs/ingest/${jobId}/`;
+			
+				//	Define the api call's configuration
+				const options = {
+					'method': 'PATCH',
+					'url': url,
+					'headers': {
+						'Content-Type': 'application/json; charset=UTF-8',
+						'Accept': 'application/json',
+						'Authorization': `Bearer ${credentials.access_token}`,
+					},
+					'data': {
+						'state': writeback.states.dataUploaded
+					}
+				};
+			
+				//	Make the api call to tableau server
+				return axios(options).then((response) => {
+					log.info(`Job ${jobId} closed`);
+					return {
+						'success': true,
+						'jobId': jobId,
+						'details': ''
+					};
+				}).catch((error) => {
+					log.error(`Error: Job ${jobId} closing failed`);
+					return {
+						'success': false,
+						'jobId': jobId,
+						'details': error
+					};
+				});
+			} */
+
+			//	Salesforce - get the status of a job
+			/* function jobStatus(credentials, jobId) {
+			
+				log.info(`Waiting for job ${jobId} to complete...`);
+			
+				//	Use simple api call (lists available rest resources) for testing
+				const url = `${credentials.instance_url}/services/data/v${extensionConfig.public.salesforceApiVersion}/jobs/ingest/${jobId}/`;
+			
+				//	Define the api call's configuration
+				const options = {
+					'method': 'GET',
+					'url': url,
+					'headers': {
+						'Content-Type': 'application/json; charset=UTF-8',
+						'Accept': 'application/json',
+						'Authorization': `Bearer ${credentials.access_token}`,
+					}
+				};
+			
+				//	Make the api call to tableau server
+				return axios(options).then((response) => {
+					log.info(`Job ${jobId} closed`);
+					return response.data;
+				}).catch((error) => {
+					log.error(`Failed to close job ${jobId}`);
+					return {
+						'success': false,
+						'jobId': jobId,
+						'details': error
+					};
+				});
+			} */
+
+			/****************************************************/
+			/*	Public methods: Salesforce API calls  		  	*/
+			/****************************************************/
+
+			//	API endpoint for logging in with a username & password
+			// 	https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/quickstart_oauth.htm
+			/* app.post('/api/salesforce/login', async (req, res) => {
+			
+				//	Start with extracting the payload of the request
+				const data = req.body ? req.body : {};
+			
+				//	Check to make sure a username & password were given
+				if (!data.username || !data.password){
+					res.send(buildResponse('Error: username & password required', true));
+					return null;
+				}
+			
+				//	Define the login payload
+				const payload = {
+					'grant_type': 'password',
+					'username': data.username,
+					'password': data.password,
+					'client_id': extensionConfig.private.consumerKey,
+					'client_secret': extensionConfig.private.consumerSecret
+				};
+			
+				//	Define the api call's configuration
+				const options = {
+					'method': 'POST',
+					'url': extensionConfig.public.salesforceLoginUri,
+					'headers': {
+						'Content-Type': 'application/x-www-form-urlencoded',
+					},
+					'data': querystring.stringify(payload)
+				};
+			
+				//	Make the API call to Salesforce
+				log.info('Request access token for ' + data.username);
+				let credentials = await axios(options).then((response) => {
+					log.info('Received access token from Salesforce');
+					return response.data
+				}).catch((error) => {
+					return buildResponse('Credentials were denied by Salesforce', true, {'error': error.message});
+				});
+			
+				//	return the response
+				if(credentials.access_token){
+			
+					//	Make sure the user belongs to an acceptable profile
+					const userProfile = await getProfile(credentials,data.username);
+			
+					//	Check to see if this user's profile is in the list of profiles that are authenticated to the connected app
+					const appProfiles = extensionConfig.private.profiles.split(',');
+					const isValid = appProfiles.indexOf(userProfile)>=0;		
+					if (isValid) {
+						//	User belongs to a valid profile
+						res.send(buildResponse('Salesforce credentials accepted',false, credentials));
+					} else {
+						//	User is valid, but their profile does not have access to the connected app
+						res.send(buildResponse('User does not belong to a profile, which can talk to the connected app', true, {}));
+					}
+				} else {
+					res.send(credentials)
+				}
+			}) */
+
+			//	API endpoint for getting a list of salesforce objects
+			//	https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/dome_describeGlobal.htm
+			/* app.get('/api/salesforce/objects', async (req, res) => {
+				
+				//	Get the authentication details
+				//const login = await salesforceInit();
+				const credentials = {
+					'access_token': req.header('access_token'),
+					'instance_url': req.header('instance_url')
+				}
+			
+				if (credentials.access_token && credentials.instance_url) {
+			
+					//	Use simple api call (lists available rest resources) for testing
+					const url = `${credentials.instance_url}/services/data/v${extensionConfig.public.salesforceApiVersion}/sobjects/`;
+			
+					//	Define the api call's configuration
+					const options = {
+						'method': 'GET',
+						'url': url,
+						'headers': {
+							'Authorization': `Bearer ${credentials.access_token}`,
+						}
+					};
+			
+					//	Make the api call to tableau server
+					return axios(options).then((response) => {
+						const message = 'Returning list of available objects';
+						log.info(message);
+						return res.send(buildResponse(message,false, response.data))
+					}).catch((error) => {
+						const message = 'Salesforce denied our API call to get the list of available objects';
+						log.error(message);
+						return res.send(buildResponse(message,true, {'error': error.message}))
+						
+					});
+				} else {
+					log.error("Not Authorize: access_token or instance_url not provided");
+					return res.send(buildResponse('Not Authorized', true, {'error': 'access_token or instance_url not provided'}))
+				}
+			}); */
+
+			//	API endpoint for describing a specific salesforce object
+			//	https://developer.salesforce.com/docs/atlas.en-us.api_rest.meta/api_rest/dome_sobject_basic_info.htm
+			/* app.get('/api/salesforce/describe', async (req, res) => {
+			
+				//	Make sure the object was passed in, otherwise return an empty array
+				if (typeof req.query.object === 'undefined') {
+					const message = 'No object defined';
+					log.info(message);
+					res.send(buildResponse(message,false, []));
+				}
+				
+				const credentials = {
+					'access_token': req.header('access_token'),
+					'instance_url': req.header('instance_url')
+				}
+			
+				if (credentials.access_token && credentials.instance_url) {
+			
+					//	API endpoint for describing the fields (and other aspects) of a given object
+					const url = `${credentials.instance_url}/services/data/v${extensionConfig.public.salesforceApiVersion}/sobjects/${req.query.object}/describe`;
+			
+					//	Define the api call's configuration
+					const options = {
+						'method': 'GET',
+						'url': url,
+						'headers': {
+							'Authorization': `Bearer ${credentials.access_token}`,
+						}
+					};
+			
+					//	Make the api call to tableau server
+					return axios(options).then((response) => {
+						const message = `Fetched the description of object=${req.query.object}`;
+						log.info(message);
+						return res.send(buildResponse(message,false, response.data));
+					}).catch((error) => {
+						const message = `API call failed when describing ${req.query.object}`;
+						log.error(message);
+						return res.send(buildResponse(message,true, {'error': error.message}));
+					});
+				} else {
+					log.error("Not Authorize: access_token or instance_url not provided");
+					return res.send(buildResponse('Not Authorized', true, {'error': 'access_token or instance_url not provided'}));
+				}
+			}); */
+
+			//	API endpoint for writing data back to salesforce (bulk api)
+			//	https://developer.salesforce.com/docs/atlas.en-us.api_bulk_v2.meta/api_bulk_v2/walkthrough_upload_data.htm
+			/* app.post('/api/salesforce/upload', async (req, res) => {
+			
+				//	Step 0: Make sure we have the auth details
+			
+				//	Get the authentication details
+				const credentials = {
+					'access_token': req.header('access_token'),
+					'instance_url': req.header('instance_url'),
+				}
+			
+				if (credentials.access_token && credentials.instance_url) {
+				
+					//	Step 1: convert the dataset to CSV
+					//	https://developer.salesforce.com/docs/atlas.en-us.api_bulk_v2.meta/api_bulk_v2/datafiles_csv_rel_field_header_row.htm
+			
+					//	Start with extracting the payload of the request
+					const payload = req.body ? req.body : {};
+			
+					//	Make sure a payload was sent
+					if (typeof payload === 'undefined') {
+						const message = 'No data provided';
+						log.error(message);
+						res.send(buildResponse(message,true, {'success': false,'recordsUploaded': 0}))
+					}
+			
+					//	Format data as CSV 
+					const csvStringifier = createCsvStringifier({
+						'header': [payload.fields],
+						'alwaysQuote': false,
+						'fieldDelimiter': ',',
+						'recordDelimiter': writeback.recordDelimiter
+					});
+			
+					//	Combine the header fields with data records
+					const data = `${payload.fields}${writeback.recordDelimiter}${csvStringifier.stringifyRecords(payload.records)}`;
+					log.trace(data);
+			
+					//	Step 2: Create a job via Salesforce API	
+					const job = await createJob(credentials, payload.object);
+			
+					//	Step 3: Upload CSV via Salesforce API
+					const upload = await uploadData(credentials, job.jobId, data);
+			
+					//	Step 4: Close the job (which triggers processing) via Salesforce API
+					const close = await closeJob(credentials, job.jobId);
+			
+					//	Step 5: Wait for the job to complete
+					
+					//	Define some variables for our condition, and mark the start time
+					let running = true;
+					let status;
+					const startTime = new Date();
+			
+					//	Loop while waiting for the condition to be false
+					while (running) {
+						
+						//	Wait before trying getting the status again
+						await sleep(writeback.pause);
+			
+						//	Get the latest status
+						status = await jobStatus(credentials, job.jobId);
+			
+						//	Re-evaluate the condition
+						log.info(`current status: ${status.state}`);
+			
+						//	Check the status of the job
+						if (status.state === writeback.states.finished) {
+							running = false;
+						}
+						//	Check for timeout
+						const runTime = (new Date() - startTime);
+						if (runTime >= writeback.timeout) {
+							running = false;
+						}
+					}
+			
+					//	Step 7: Return a response
+					const message = `${status.numberRecordsProcessed} records written to ${payload.object}`;
+					log.info(message);
+					res.send(
+						buildResponse(
+							message,
+							false, 
+							{
+								'success': true,
+								'recordsUploaded': status.numberRecordsProcessed,
+								'details': status.state
+							}
+						)
+					)
+				} else {
+					const message = "Not Authorize: access_token or instance_url not provided";
+					log.error(message);
+					return res.send(buildResponse(message, true, {'error': 'A valid access_token and instance_url must be provided, in order to write data to salesforce'}))
+				}
+			
+			}); */
+
+			//	API endpoint for fetching this app's configuration settings
+			app.get('/api/config', (req, res) => res.send(extensionConfig.public));
+
+			/****************************************************/
+			/*	Start the Web App  		  					  	*/
+			/****************************************************/
+
+			//	Start the application, and listen on a given port
+			app.listen(process.env.PORT || 8080, () => console.log(`Listening on port ${process.env.PORT || 8080}!`));

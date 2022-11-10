@@ -1,3 +1,10 @@
+install - had to add
+https://stackoverflow.com/questions/41528180/seeing-error-module-not-found-pg-native-in-heroku-app
+and maybe items from
+https://github.com/mysqljs/mysql/issues/1563
+
+
+
 # Salesforce Writeback Extension
 This project is a Tableau Desktop Extension, which allows users to take data from their workbook and write it as records to an object within Salesforce.  This web app acts as a middle-man between salesforce and your Tableau dashboard.  You specify a worksheet from your dashboard that contains the data you want to write, and when you click the Save button the app will grab the data from your worksheet and upload it to salesforce.  You can decide what object gets written to, as well as what fields you want to write to.  This process leverage the Salesforce REST API to login (with your credentials) and the Bulk API to upload the data.  If you're interested in seeing the code specific to writeback, it's found in */src/server/index.js*
 

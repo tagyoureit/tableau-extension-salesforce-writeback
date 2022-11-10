@@ -1,7 +1,7 @@
 const path = require('path');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const CleanWebpackPlugin = require('clean-webpack-plugin');
-
+const webpack = require('webpack');
 const outputDirectory = 'dist';
 
 const dotenv = require('dotenv');
@@ -47,6 +47,8 @@ module.exports = {
     new HtmlWebpackPlugin({
       template: './public/index.html',
       favicon: './public/favicon.ico'
-    })
-  ]
+    }),
+  ],
+  mode: "development",
+  devtool: "inline-source-map",
 };
