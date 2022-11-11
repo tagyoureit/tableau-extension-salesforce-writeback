@@ -95,7 +95,7 @@ class Extension extends React.Component {
   /**************************************/
 
 
-  async resetData(){
+  async resetData() {
     const thisComponent = this;
     function setoptions() {
       const options = {
@@ -109,7 +109,7 @@ class Extension extends React.Component {
         }
       }
       return options;
-     
+
     }
     let opts = setoptions();
     const options = {
@@ -122,7 +122,8 @@ class Extension extends React.Component {
       },
       'data': opts
     };
-
+          //  Update the state, to show that saving is in progress
+          thisComponent.setState({ 'saving': true });
     // Execute the API call
     return Axios(options).then(async (response) => {
       //  Double check the response
@@ -154,6 +155,9 @@ class Extension extends React.Component {
       //  Notify the user
       toast.error(error);
       return null;
+    }).finally(()=>{
+            //  Update the state, to show that saving is in progress
+            thisComponent.setState({ 'saving': false });
     });
   }
 
@@ -379,6 +383,8 @@ class Extension extends React.Component {
         //  Notify the user
         toast.error(error);
         return null;
+      }).finally(() => {
+
       });
       /*       const options = {
               host: "ec2-44-195-100-240.compute-1.amazonaws.com",
@@ -519,9 +525,9 @@ class Extension extends React.Component {
         return <Button kind="primary" key="writeback" disabled >Saving...</Button>
       } else {
         return (<div>
-          <Button kind="primary" key="writeback" onClick={this.sendData}>Save</Button>
-          <Button kind="primary" key="resetData" onClick={this.resetData}>Reset</Button>
-          </div>)
+          <Button key="writeback" onClick={this.sendData} className="tableau-worksheet">Save</Button>
+          <Button kind="lowEmphasis" key="resetData" onClick={this.resetData} className={"tableau-worksheet"}>Reset</Button>
+        </div>)
       }
     }
 
