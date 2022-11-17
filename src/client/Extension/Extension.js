@@ -2,6 +2,7 @@ import React from 'react';
 import Axios from 'axios';
 import { Button } from '@tableau/tableau-ui';
 import { toast } from 'react-toastify';
+import { collectBy } from 'ramda';
 
 
 
@@ -294,8 +295,8 @@ class Extension extends React.Component {
         // data.records.push(record)
         let r = [];
         row.forEach((col, index2) => {
-          r.push(col.value);
-        })
+          r.push(col.value === "%null%" || col.value === null ? 0 : col.value);
+        });
         data.records.push(r);
       })
 
